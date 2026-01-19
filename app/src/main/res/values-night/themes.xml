@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Alarmcon" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#8B85FF</item>
+        <item name="colorPrimaryVariant">#6D66FF</item>
+        <item name="colorOnPrimary">#0B0B12</item>
+        <item name="colorSecondary">#34D399</item>
+        <item name="colorSecondaryVariant">#10B981</item>
+        <item name="colorOnSecondary">#0B0B12</item>
+        <item name="colorSurface">#12131A</item>
+        <item name="colorOnSurface">#E7E9F2</item>
+        <item name="android:windowBackground">#0E0F14</item>
+        <item name="android:statusBarColor">#0E0F14</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+    </style>
+</resources>
