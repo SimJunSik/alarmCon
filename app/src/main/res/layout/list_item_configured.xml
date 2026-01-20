@@ -7,7 +7,15 @@
     android:paddingEnd="8dp"
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
+    android:gravity="center_vertical"
     android:descendantFocusability="blocksDescendants">
+
+    <ImageView
+        android:id="@+id/appIcon"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginEnd="10dp"
+        android:contentDescription="@string/app_name" />
 
     <TextView
         android:id="@+id/configText"

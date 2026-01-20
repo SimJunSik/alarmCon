@@ -43,6 +43,7 @@
     <string name="ai_missing_key">OpenAI API 키가 설정되지 않았습니다</string>
     <string name="ai_request_failed">AI 요청 실패</string>
     <string name="ai_invalid_response">AI 응답을 해석할 수 없습니다</string>
+    <string name="ai_rate_limited">요청이 많습니다. 잠시 후 다시 시도하세요</string>
     <string name="save_pattern">패턴 저장</string>
     <string name="saved">저장됨</string>
     <string name="invalid_pattern">패턴 형식이 올바르지 않습니다</string>

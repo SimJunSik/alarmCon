@@ -194,8 +194,6 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/pattern_help" />
 
-                <!-- AI prompt input disabled -->
-                <!--
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/Widget.Alarmcon.TextInput"
                     android:layout_width="match_parent"
@@ -210,9 +208,7 @@
                         android:hint="@string/ai_prompt_hint"
                         android:inputType="text" />
                 </com.google.android.material.textfield.TextInputLayout>
-                -->
 
-                <!--
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/aiGenerateButton"
                     style="@style/Widget.Alarmcon.Button.Secondary"
@@ -220,7 +216,6 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/ai_generate" />
-                -->
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/testVibrationButton"
@@ -325,19 +320,38 @@
                         android:text="긴 진동" />
                 </LinearLayout>
 
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/muteWhenNoSenderSwitch"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="@string/mute_when_no_sender" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <TextView
-                    style="@style/Widget.Alarmcon.HelperText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="@string/mute_when_no_sender_help" />
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/muteWhenNoSenderSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/Widget.Alarmcon.SectionTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/mute_when_no_sender" />
+
+                        <TextView
+                            style="@style/Widget.Alarmcon.HelperText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/mute_when_no_sender_help" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/saveButton"

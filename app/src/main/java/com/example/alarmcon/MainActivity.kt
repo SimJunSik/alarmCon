@@ -18,6 +18,7 @@ import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.util.Log
+import android.content.pm.PackageManager
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import androidx.appcompat.app.AlertDialog
@@ -47,7 +48,7 @@ class MainActivity : AppCompatActivity() {
     private val nameToPackage = mutableMapOf<String, String>()
     private val searchResults = mutableListOf<AppEntry>()
     private val searchDisplayList = mutableListOf<String>()
-    private lateinit var searchAdapter: ArrayAdapter<String>
+    private lateinit var searchAdapter: SearchAdapter
     private val configuredEntries = mutableListOf<ConfigEntry>()
     private lateinit var configuredAdapter: ConfiguredAdapter
     private lateinit var vibrator: Vibrator
@@ -69,8 +70,8 @@ class MainActivity : AppCompatActivity() {
         val patternNameInput = findViewById<EditText>(R.id.patternNameInput)
         val senderNameInput = findViewById<EditText>(R.id.senderNameInput)
         val patternInput = findViewById<EditText>(R.id.patternInput)
-        // val aiPromptInput = findViewById<EditText>(R.id.aiPromptInput)
-        // val aiGenerateButton = findViewById<Button>(R.id.aiGenerateButton)
+        val aiPromptInput = findViewById<EditText>(R.id.aiPromptInput)
+        val aiGenerateButton = findViewById<Button>(R.id.aiGenerateButton)
         val pulseDurationInput = findViewById<EditText>(R.id.pulseDurationInput)
         val pauseDurationInput = findViewById<EditText>(R.id.pauseDurationInput)
         val addPulseButton = findViewById<Button>(R.id.addPulseButton)
@@ -98,7 +99,7 @@ class MainActivity : AppCompatActivity() {
 
         loadInstalledApps()
 
-        searchAdapter = ArrayAdapter(this, R.layout.list_item_text, searchDisplayList)
+        searchAdapter = SearchAdapter()
         searchResultsListView.adapter = searchAdapter
         searchResultsListView.setOnItemClickListener { _, _, position, _ ->
             val entry = searchResults.getOrNull(position) ?: return@setOnItemClickListener
@@ -129,21 +130,13 @@ class MainActivity : AppCompatActivity() {
             vibrate(pattern)
         }
 
-        /*
-        // AI pattern generation disabled.
         aiGenerateButton.setOnClickListener {
-            val apiKey = BuildConfig.OPENAI_API_KEY
-            if (apiKey.isBlank()) {
-                Toast.makeText(this, R.string.ai_missing_key, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
             val prompt = aiPromptInput.text.toString().trim()
             aiGenerateButton.isEnabled = false
             aiGenerateButton.text = getString(R.string.ai_generate) + "..."
 
             Thread {
-                val result = requestPatternFromAi(apiKey, prompt)
+                val result = requestPatternFromAi(prompt)
                 runOnUiThread {
                     aiGenerateButton.isEnabled = true
                     aiGenerateButton.text = getString(R.string.ai_generate)
@@ -154,7 +147,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }.start()
         }
-        */
 
         addPulseButton.setOnClickListener {
             val pulseText = pulseDurationInput.text.toString().trim()
@@ -188,7 +180,7 @@ class MainActivity : AppCompatActivity() {
             senderNameInput.setText("")
             muteWhenNoSender = false
             muteWhenNoSenderSwitch.isChecked = false
-            // aiPromptInput.setText("")
+            aiPromptInput.setText("")
             pulseDurationInput.setText("")
             pauseDurationInput.setText("")
             currentSelectedStorageKey = null
@@ -385,12 +377,20 @@ class MainActivity : AppCompatActivity() {
                 false
             )
             val entry = configuredEntries[position]
+            val iconView = view.findViewById<android.widget.ImageView>(R.id.appIcon)
             val textView = view.findViewById<android.widget.TextView>(R.id.configText)
             val deleteButton = view.findViewById<Button>(R.id.deleteButton)
 
             val senderLabel = entry.sender?.let { " · $it" } ?: ""
             val muteLabel = if (entry.muteWhenNoSender) " · 무음" else ""
             textView.text = "${entry.appName} · ${entry.patternName}${senderLabel}${muteLabel}"
+
+            try {
+                val icon = packageManager.getApplicationIcon(entry.packageName)
+                iconView.setImageDrawable(icon)
+            } catch (_: PackageManager.NameNotFoundException) {
+                iconView.setImageResource(R.drawable.ic_launcher)
+            }
 
             view.setOnClickListener {
                 fillFormFromEntry(entry)
@@ -411,6 +411,34 @@ class MainActivity : AppCompatActivity() {
                     }
                     .setNegativeButton(R.string.delete_cancel, null)
                     .show()
+            }
+            return view
+        }
+    }
+
+    private inner class SearchAdapter : BaseAdapter() {
+        override fun getCount(): Int = searchResults.size
+
+        override fun getItem(position: Int): Any = searchResults[position]
+
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+            val view = convertView ?: layoutInflater.inflate(
+                R.layout.list_item_text,
+                parent,
+                false
+            )
+            val entry = searchResults[position]
+            val iconView = view.findViewById<android.widget.ImageView>(R.id.appIcon)
+            val textView = view.findViewById<android.widget.TextView>(android.R.id.text1)
+            textView.text = entry.name
+
+            try {
+                val icon = packageManager.getApplicationIcon(entry.packageName)
+                iconView.setImageDrawable(icon)
+            } catch (_: PackageManager.NameNotFoundException) {
+                iconView.setImageResource(R.drawable.ic_launcher)
             }
             return view
         }
@@ -454,14 +482,12 @@ class MainActivity : AppCompatActivity() {
 
     // muteWhenNoSender state is reflected by the switch
 
-    /*
-    // AI pattern generation disabled.
     private sealed class AiResult {
         data class Success(val pattern: String) : AiResult()
         data class Error(val messageRes: Int) : AiResult()
     }
 
-    private fun requestPatternFromAi(apiKey: String, userPrompt: String): AiResult {
+    private fun requestPatternFromAi(userPrompt: String): AiResult {
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
@@ -469,27 +495,16 @@ class MainActivity : AppCompatActivity() {
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .callTimeout(45, TimeUnit.SECONDS)
                 .build()
-            val systemPrompt =
-                "You generate Android vibration patterns. Output ONLY a comma-separated " +
-                    "list of non-negative integers in milliseconds starting with 0. " +
-                    "Example: 0,150,80,300. No extra text."
-            val finalPrompt = if (userPrompt.isBlank()) {
-                "Create a clean, noticeable vibration pattern."
-            } else {
-                "Create a vibration pattern that feels like: $userPrompt"
-            }
 
             val body = JSONObject()
                 .put("model", "gpt-5-mini")
-                .put("instructions", systemPrompt)
-                .put("input", finalPrompt)
+                .put("user_prompt", userPrompt)
 
             val requestBody = body.toString()
                 .toRequestBody("application/json".toMediaType())
 
             val request = Request.Builder()
-                .url("https://api.openai.com/v1/responses")
-                .addHeader("Authorization", "Bearer $apiKey")
+                .url("http://alarmcon-lb-2090533585.ap-southeast-2.elb.amazonaws.com/v1/vibration/pattern")
                 .addHeader("Content-Type", "application/json")
                 .post(requestBody)
                 .build()
@@ -500,14 +515,14 @@ class MainActivity : AppCompatActivity() {
                     val responseBody = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
                         Log.e("AlarmconAI", "Request failed: ${response.code} $responseBody")
+                        if (response.code == 429) {
+                            return AiResult.Error(R.string.ai_rate_limited)
+                        }
                         return AiResult.Error(R.string.ai_request_failed)
                     }
 
-                    val content = extractResponseText(responseBody)
-                        ?: return AiResult.Error(R.string.ai_invalid_response)
-
-                    val patternText = extractPatternText(content)
-                        ?: return AiResult.Error(R.string.ai_invalid_response)
+                    val patternText = JSONObject(responseBody).optString("pattern", "").trim()
+                        .ifEmpty { return AiResult.Error(R.string.ai_invalid_response) }
                     val parsed = PatternStore.parsePatternText(patternText)
                         ?: return AiResult.Error(R.string.ai_invalid_response)
                     return AiResult.Success(parsed.joinToString(", "))
@@ -528,37 +543,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun extractPatternText(content: String): String? {
-        val numbers = Regex("\\d+")
-            .findAll(content)
-            .map { it.value }
-            .toList()
-        if (numbers.isEmpty()) return null
-        val normalized = if (numbers.first() == "0") numbers else listOf("0") + numbers
-        return normalized.joinToString(", ")
-    }
-
-    private fun extractResponseText(responseBody: String): String? {
-        return try {
-            val json = JSONObject(responseBody)
-            val direct = json.optString("output_text", "").trim()
-            if (direct.isNotEmpty()) return direct
-
-            val output = json.optJSONArray("output") ?: return null
-            if (output.length() == 0) return null
-            for (i in 0 until output.length()) {
-                val item = output.optJSONObject(i) ?: continue
-                val content = item.optJSONArray("content") ?: continue
-                for (j in 0 until content.length()) {
-                    val entry = content.optJSONObject(j) ?: continue
-                    val text = entry.optString("text", "").trim()
-                    if (text.isNotEmpty()) return text
-                }
-            }
-            null
-        } catch (_: Exception) {
-            null
-        }
-    }
-    */
 }
