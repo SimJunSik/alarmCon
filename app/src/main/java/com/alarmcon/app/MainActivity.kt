@@ -1,6 +1,8 @@
-package com.example.alarmcon
+package com.alarmcon.app
 
+import android.Manifest
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -18,7 +20,13 @@ import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.os.LocaleListCompat
+import androidx.core.content.ContextCompat
+import androidx.core.app.NotificationManagerCompat
 import android.content.pm.PackageManager
+import android.graphics.drawable.GradientDrawable
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 import androidx.appcompat.app.AlertDialog
@@ -56,6 +64,12 @@ class MainActivity : AppCompatActivity() {
     private var currentSelectedStorageKey: String? = null
     private var currentSelectedKind: PatternStore.PatternKind? = null
     private var isProgrammaticFill = false
+    private val requestNotificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) {
+                showAppNotificationsDialog()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,8 +86,10 @@ class MainActivity : AppCompatActivity() {
         val patternInput = findViewById<EditText>(R.id.patternInput)
         val aiPromptInput = findViewById<EditText>(R.id.aiPromptInput)
         val aiGenerateButton = findViewById<Button>(R.id.aiGenerateButton)
+        val aiGenerateProgress = findViewById<android.widget.ProgressBar>(R.id.aiGenerateProgress)
         val pulseDurationInput = findViewById<EditText>(R.id.pulseDurationInput)
         val pauseDurationInput = findViewById<EditText>(R.id.pauseDurationInput)
+        val pulseStrengthInput = findViewById<EditText>(R.id.pulseStrengthInput)
         val addPulseButton = findViewById<Button>(R.id.addPulseButton)
         val clearPatternButton = findViewById<Button>(R.id.clearPatternButton)
         val saveButton = findViewById<Button>(R.id.saveButton)
@@ -88,10 +104,26 @@ class MainActivity : AppCompatActivity() {
             findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(
                 R.id.muteWhenNoSenderSwitch
             )
+        val patternPreviewContainer =
+            findViewById<android.widget.LinearLayout>(R.id.patternPreviewContainer)
+        val patternPreviewEmpty =
+            findViewById<android.widget.TextView>(R.id.patternPreviewEmpty)
+        val selectedAppRow = findViewById<android.widget.LinearLayout>(R.id.selectedAppRow)
+        val selectedAppIcon = findViewById<android.widget.ImageView>(R.id.selectedAppIcon)
+        val selectedAppName = findViewById<android.widget.TextView>(R.id.selectedAppName)
 
         openSettingsButton.setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
+
+        // Reset to system locale (in case a manual override was previously set).
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+
+        if (!isNotificationListenerEnabled()) {
+            showNotificationAccessDialog()
+        }
+        requestNotificationPermissionIfNeeded()
+
 
         openHelpButton.setOnClickListener {
             startActivity(Intent(this, HelpActivity::class.java))
@@ -106,6 +138,14 @@ class MainActivity : AppCompatActivity() {
             packageNameInput.setText(entry.name)
             currentSelectedStorageKey = null
             currentSelectedKind = null
+            configuredAdapter.notifyDataSetChanged()
+            updateSelectedAppHeader(
+                selectedAppRow,
+                selectedAppIcon,
+                selectedAppName,
+                entry.packageName,
+                entry.name
+            )
         }
 
         packageNameInput.addTextChangedListener(object : TextWatcher {
@@ -116,30 +156,52 @@ class MainActivity : AppCompatActivity() {
                 if (!isProgrammaticFill) {
                     currentSelectedStorageKey = null
                     currentSelectedKind = null
+                    configuredAdapter.notifyDataSetChanged()
                 }
+                updateSelectedAppHeader(
+                    selectedAppRow,
+                    selectedAppIcon,
+                    selectedAppName,
+                    resolvePackageFromInput(s?.toString().orEmpty()),
+                    s?.toString().orEmpty()
+                )
+            }
+        })
+
+        patternInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                updatePatternPreview(
+                    patternPreviewContainer,
+                    patternPreviewEmpty,
+                    s?.toString().orEmpty()
+                )
             }
         })
 
         testVibrationButton.setOnClickListener {
             val patternText = patternInput.text.toString().trim()
-            val pattern = PatternStore.parsePatternText(patternText)
-            if (pattern == null) {
+            val patternData = PatternStore.parsePatternText(patternText)
+            if (patternData == null) {
                 Toast.makeText(this, R.string.invalid_pattern, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            vibrate(pattern)
+            vibrate(patternData)
         }
 
         aiGenerateButton.setOnClickListener {
             val prompt = aiPromptInput.text.toString().trim()
             aiGenerateButton.isEnabled = false
-            aiGenerateButton.text = getString(R.string.ai_generate) + "..."
+            aiGenerateButton.text = getString(R.string.ai_generate_loading)
+            aiGenerateProgress.visibility = android.view.View.VISIBLE
 
             Thread {
                 val result = requestPatternFromAi(prompt)
                 runOnUiThread {
                     aiGenerateButton.isEnabled = true
                     aiGenerateButton.text = getString(R.string.ai_generate)
+                    aiGenerateProgress.visibility = android.view.View.GONE
                     when (result) {
                         is AiResult.Success -> patternInput.setText(result.pattern)
                         is AiResult.Error -> Toast.makeText(this, result.messageRes, Toast.LENGTH_SHORT).show()
@@ -151,6 +213,7 @@ class MainActivity : AppCompatActivity() {
         addPulseButton.setOnClickListener {
             val pulseText = pulseDurationInput.text.toString().trim()
             val pauseText = pauseDurationInput.text.toString().trim()
+            val strengthText = pulseStrengthInput.text.toString().trim()
 
             if (pulseText.isEmpty() || pauseText.isEmpty()) {
                 Toast.makeText(this, R.string.missing_pulse_pause, Toast.LENGTH_SHORT).show()
@@ -159,17 +222,23 @@ class MainActivity : AppCompatActivity() {
 
             val pulse = pulseText.toLongOrNull()
             val pause = pauseText.toLongOrNull()
+            val strength = strengthText.toIntOrNull()?.coerceIn(1, 255)
 
             if (pulse == null || pause == null || pulse < 0L || pause < 0L) {
                 Toast.makeText(this, R.string.invalid_pattern, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (strengthText.isNotEmpty() && strength == null) {
+                Toast.makeText(this, R.string.invalid_pattern, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
 
             val current = patternInput.text.toString().trim()
+            val pulseToken = if (strength != null) "$pulse:$strength" else pulse.toString()
             val addition = if (current.isEmpty()) {
-                "0, $pulse, $pause"
+                "0, $pulseToken, $pause"
             } else {
-                "$current, $pulse, $pause"
+                "$current, $pulseToken, $pause"
             }
             patternInput.setText(addition)
         }
@@ -183,8 +252,17 @@ class MainActivity : AppCompatActivity() {
             aiPromptInput.setText("")
             pulseDurationInput.setText("")
             pauseDurationInput.setText("")
+            pulseStrengthInput.setText("")
             currentSelectedStorageKey = null
             currentSelectedKind = null
+            configuredAdapter.notifyDataSetChanged()
+            updateSelectedAppHeader(
+                selectedAppRow,
+                selectedAppIcon,
+                selectedAppName,
+                null,
+                ""
+            )
         }
 
         openAppNotificationSettingsButton.setOnClickListener {
@@ -212,25 +290,51 @@ class MainActivity : AppCompatActivity() {
         configuredListView.adapter = configuredAdapter
         configuredListView.setOnItemClickListener { _, _, position, _ ->
             val entry = configuredEntries.getOrNull(position) ?: return@setOnItemClickListener
-            fillFormFromEntry(entry)
+            if (entry.storageKey == currentSelectedStorageKey && entry.kind == currentSelectedKind) {
+                clearFormSelection(
+                    selectedAppRow,
+                    selectedAppIcon,
+                    selectedAppName,
+                    packageNameInput,
+                    patternNameInput,
+                    senderNameInput,
+                    patternInput,
+                    aiPromptInput,
+                    pulseDurationInput,
+                    pauseDurationInput,
+                    pulseStrengthInput,
+                    muteWhenNoSenderSwitch
+                )
+            } else {
+                fillFormFromEntry(entry)
+                updateSelectedAppHeader(
+                    selectedAppRow,
+                    selectedAppIcon,
+                    selectedAppName,
+                    entry.packageName,
+                    entry.appName
+                )
+            }
         }
 
         refreshConfiguredList()
         updateSearchResults(packageNameInput.text.toString())
+        updateSelectedAppHeader(selectedAppRow, selectedAppIcon, selectedAppName, null, "")
+        updatePatternPreview(patternPreviewContainer, patternPreviewEmpty, patternInput.text.toString())
 
         shortVibrationButton.setOnClickListener {
-            vibrate(longArrayOf(0, 150))
-            addVibrationPattern(patternInput, "150, 80")
+            vibrate(PatternStore.PatternData(longArrayOf(0, 150), intArrayOf(0, 255)))
+            addVibrationPattern(patternInput, "150:255, 80")
         }
 
         mediumVibrationButton.setOnClickListener {
-            vibrate(longArrayOf(0, 300))
-            addVibrationPattern(patternInput, "300, 80")
+            vibrate(PatternStore.PatternData(longArrayOf(0, 300), intArrayOf(0, 255)))
+            addVibrationPattern(patternInput, "300:255, 80")
         }
 
         longVibrationButton.setOnClickListener {
-            vibrate(longArrayOf(0, 500))
-            addVibrationPattern(patternInput, "500, 80")
+            vibrate(PatternStore.PatternData(longArrayOf(0, 500), intArrayOf(0, 255)))
+            addVibrationPattern(patternInput, "500:255, 80")
         }
         muteWhenNoSenderSwitch.setOnCheckedChangeListener { _, isChecked ->
             muteWhenNoSender = isChecked
@@ -290,13 +394,10 @@ class MainActivity : AppCompatActivity() {
         editText.setText(newText)
     }
 
-    private fun vibrate(pattern: LongArray) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(pattern, -1)
-        }
+    private fun vibrate(pattern: PatternStore.PatternData) {
+        vibrator.vibrate(
+            VibrationEffect.createWaveform(pattern.timings, pattern.amplitudes, -1)
+        )
     }
 
     private fun loadInstalledApps() {
@@ -385,15 +486,26 @@ class MainActivity : AppCompatActivity() {
             val muteLabel = if (entry.muteWhenNoSender) " · 무음" else ""
             textView.text = "${entry.appName} · ${entry.patternName}${senderLabel}${muteLabel}"
 
+            val isSelected = entry.storageKey == currentSelectedStorageKey &&
+                entry.kind == currentSelectedKind
+            val highlightColor = if (isSelected) {
+                ContextCompat.getColor(this@MainActivity, R.color.dropdown_selected)
+            } else {
+                ContextCompat.getColor(this@MainActivity, android.R.color.transparent)
+            }
+            view.setBackgroundColor(highlightColor)
+            val textColor = if (isSelected) {
+                ContextCompat.getColor(this@MainActivity, R.color.primary)
+            } else {
+                ContextCompat.getColor(this@MainActivity, R.color.on_surface)
+            }
+            textView.setTextColor(textColor)
+
             try {
                 val icon = packageManager.getApplicationIcon(entry.packageName)
                 iconView.setImageDrawable(icon)
             } catch (_: PackageManager.NameNotFoundException) {
                 iconView.setImageResource(R.drawable.ic_launcher)
-            }
-
-            view.setOnClickListener {
-                fillFormFromEntry(entry)
             }
 
             deleteButton.setOnClickListener {
@@ -464,6 +576,122 @@ class MainActivity : AppCompatActivity() {
         isProgrammaticFill = false
         currentSelectedStorageKey = entry.storageKey
         currentSelectedKind = entry.kind
+        configuredAdapter.notifyDataSetChanged()
+    }
+
+    private fun updateSelectedAppHeader(
+        row: android.widget.LinearLayout,
+        iconView: android.widget.ImageView,
+        nameView: android.widget.TextView,
+        packageName: String?,
+        displayName: String
+    ) {
+        if (packageName.isNullOrBlank()) {
+            row.visibility = android.view.View.VISIBLE
+            iconView.setImageDrawable(null)
+            iconView.visibility = android.view.View.GONE
+            nameView.text = getString(R.string.selected_app_placeholder)
+            return
+        }
+
+        row.visibility = android.view.View.VISIBLE
+        iconView.visibility = android.view.View.VISIBLE
+        nameView.text = if (displayName.isNotBlank()) displayName else packageName
+        try {
+            val icon = packageManager.getApplicationIcon(packageName)
+            iconView.setImageDrawable(icon)
+        } catch (_: PackageManager.NameNotFoundException) {
+            iconView.setImageResource(R.drawable.ic_launcher)
+        }
+    }
+
+    private fun updatePatternPreview(
+        container: android.widget.LinearLayout,
+        emptyView: android.widget.TextView,
+        patternText: String
+    ) {
+        container.removeAllViews()
+        val pattern = PatternStore.parsePatternText(patternText)
+        if (pattern == null || pattern.timings.isEmpty()) {
+            emptyView.visibility = android.view.View.VISIBLE
+            return
+        }
+        emptyView.visibility = android.view.View.GONE
+
+        val total = pattern.timings.sum().coerceAtLeast(1L)
+        val totalWidthPx = dpToPx(240)
+        val minWidthPx = dpToPx(6)
+        val minHeightPx = dpToPx(6)
+        val maxHeightPx = dpToPx(16)
+        val gapPx = dpToPx(4)
+
+        for (index in pattern.timings.indices) {
+            val value = pattern.timings[index].coerceAtLeast(0L)
+            val proportional = (totalWidthPx * value / total).toInt().coerceAtLeast(minWidthPx)
+            val segment = android.view.View(this)
+            val isVibrate = index % 2 == 1
+            val amplitude = pattern.amplitudes.getOrNull(index) ?: 0
+            val height = if (isVibrate) {
+                val scaled = (maxHeightPx * amplitude / 255f).toInt()
+                scaled.coerceIn(minHeightPx, maxHeightPx)
+            } else {
+                minHeightPx
+            }
+            val params = android.widget.LinearLayout.LayoutParams(proportional, height)
+            if (index < pattern.timings.lastIndex) {
+                params.marginEnd = gapPx
+            }
+            segment.layoutParams = params
+            segment.background = buildPreviewSegmentDrawable(isVibrate)
+            container.addView(segment)
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        val density = resources.displayMetrics.density
+        return (dp * density).toInt()
+    }
+
+    private fun buildPreviewSegmentDrawable(isVibrate: Boolean): GradientDrawable {
+        val colorRes = if (isVibrate) R.color.primary else R.color.outline
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpToPx(6).toFloat()
+            setColor(ContextCompat.getColor(this@MainActivity, colorRes))
+        }
+    }
+
+    private fun clearFormSelection(
+        selectedRow: android.widget.LinearLayout,
+        selectedIcon: android.widget.ImageView,
+        selectedName: android.widget.TextView,
+        packageNameInput: EditText,
+        patternNameInput: EditText,
+        senderNameInput: EditText,
+        patternInput: EditText,
+        aiPromptInput: EditText,
+        pulseDurationInput: EditText,
+        pauseDurationInput: EditText,
+        pulseStrengthInput: EditText,
+        muteSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    ) {
+        isProgrammaticFill = true
+        packageNameInput.setText("")
+        patternNameInput.setText("")
+        senderNameInput.setText("")
+        patternInput.setText("")
+        aiPromptInput.setText("")
+        pulseDurationInput.setText("")
+        pauseDurationInput.setText("")
+        pulseStrengthInput.setText("")
+        isProgrammaticFill = false
+
+        muteWhenNoSender = false
+        muteSwitch.isChecked = false
+        currentSelectedStorageKey = null
+        currentSelectedKind = null
+        configuredAdapter.notifyDataSetChanged()
+        updateSelectedAppHeader(selectedRow, selectedIcon, selectedName, null, "")
     }
 
     private fun updateSearchResults(query: String) {
@@ -480,7 +708,68 @@ class MainActivity : AppCompatActivity() {
         searchAdapter.notifyDataSetChanged()
     }
 
+
     // muteWhenNoSender state is reflected by the switch
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabled =
+            Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
+        val components = enabled.split(":")
+        for (component in components) {
+            val componentName = ComponentName.unflattenFromString(component)
+            if (componentName?.packageName == packageName) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun showNotificationAccessDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.notification_access_title)
+            .setMessage(R.string.notification_access_message)
+            .setPositiveButton(R.string.notification_access_open) { _, _ ->
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            }
+            .setNegativeButton(R.string.notification_access_later, null)
+            .show()
+    }
+
+    private fun areAppNotificationsEnabled(): Boolean {
+        return NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
+
+    private fun showAppNotificationsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.app_notifications_title)
+            .setMessage(R.string.app_notifications_message)
+            .setPositiveButton(R.string.app_notifications_open) { _, _ ->
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    }
+                } else {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                }
+                startActivity(intent)
+            }
+            .setNegativeButton(R.string.app_notifications_later, null)
+            .show()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!areAppNotificationsEnabled()) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            if (!areAppNotificationsEnabled()) {
+                showAppNotificationsDialog()
+            }
+        }
+    }
 
     private sealed class AiResult {
         data class Success(val pattern: String) : AiResult()
@@ -491,9 +780,9 @@ class MainActivity : AppCompatActivity() {
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .callTimeout(45, TimeUnit.SECONDS)
+                .readTimeout(3, TimeUnit.MINUTES)
+                .writeTimeout(3, TimeUnit.MINUTES)
+                .callTimeout(3, TimeUnit.MINUTES)
                 .build()
 
             val body = JSONObject()
@@ -504,7 +793,7 @@ class MainActivity : AppCompatActivity() {
                 .toRequestBody("application/json".toMediaType())
 
             val request = Request.Builder()
-                .url("http://alarmcon-lb-2090533585.ap-southeast-2.elb.amazonaws.com/v1/vibration/pattern")
+                .url("https://alarmcon.xyz/v1/vibration/pattern")
                 .addHeader("Content-Type", "application/json")
                 .post(requestBody)
                 .build()
@@ -523,9 +812,9 @@ class MainActivity : AppCompatActivity() {
 
                     val patternText = JSONObject(responseBody).optString("pattern", "").trim()
                         .ifEmpty { return AiResult.Error(R.string.ai_invalid_response) }
-                    val parsed = PatternStore.parsePatternText(patternText)
+                    PatternStore.parsePatternText(patternText)
                         ?: return AiResult.Error(R.string.ai_invalid_response)
-                    return AiResult.Success(parsed.joinToString(", "))
+                    return AiResult.Success(patternText)
                 } catch (e: SocketTimeoutException) {
                     Log.e("AlarmconAI", "Request timeout (attempt $attempt)", e)
                     if (attempt == 2) {

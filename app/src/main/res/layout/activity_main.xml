@@ -132,11 +132,45 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <TextView
-                    style="@style/Widget.Alarmcon.SectionTitle"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/section_pattern" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Widget.Alarmcon.SectionTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/section_pattern" />
+
+                    <LinearLayout
+                        android:id="@+id/selectedAppRow"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:background="@color/dropdown_selected"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:padding="8dp">
+
+                        <ImageView
+                            android:id="@+id/selectedAppIcon"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="@string/app_name" />
+
+                        <TextView
+                            android:id="@+id/selectedAppName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/selected_app_placeholder"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/Widget.Alarmcon.TextInput"
@@ -194,36 +228,36 @@
                     android:layout_marginTop="6dp"
                     android:text="@string/pattern_help" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Alarmcon.TextInput"
+                <TextView
+                    android:id="@+id/patternPreviewLabel"
+                    style="@style/Widget.Alarmcon.HelperText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginTop="8dp"
+                    android:text="@string/pattern_preview" />
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/aiPromptInput"
-                        style="@style/Widget.Alarmcon.TextInputEditText"
-                        android:layout_width="match_parent"
+                <HorizontalScrollView
+                    android:id="@+id/patternPreviewScroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:fillViewport="true"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/patternPreviewContainer"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:hint="@string/ai_prompt_hint"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/aiGenerateButton"
-                    style="@style/Widget.Alarmcon.Button.Secondary"
+                <TextView
+                    android:id="@+id/patternPreviewEmpty"
+                    style="@style/Widget.Alarmcon.HelperText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/ai_generate" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/testVibrationButton"
-                    style="@style/Widget.Alarmcon.Button.Outlined"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/test_vibration" />
+                    android:text="@string/pattern_preview_empty"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -259,6 +293,22 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:hint="@string/pause_duration_hint"
+                            android:inputType="number" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Alarmcon.TextInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/pulseStrengthInput"
+                            style="@style/Widget.Alarmcon.TextInputEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/pulse_strength_hint"
                             android:inputType="number" />
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
@@ -299,7 +349,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="짧은 진동" />
+                        android:text="@string/short_vibration" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/mediumVibrationButton"
@@ -308,7 +358,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
-                        android:text="중간 진동" />
+                        android:text="@string/medium_vibration" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/longVibrationButton"
@@ -317,8 +367,67 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:layout_weight="1"
-                        android:text="긴 진동" />
+                        android:text="@string/long_vibration" />
                 </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@color/outline" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Alarmcon.TextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/aiPromptInput"
+                        style="@style/Widget.Alarmcon.TextInputEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/ai_prompt_hint"
+                        android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/aiGenerateButton"
+                        style="@style/Widget.Alarmcon.Button.Secondary"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/ai_generate" />
+
+                    <ProgressBar
+                        android:id="@+id/aiGenerateProgress"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginStart="10dp"
+                        android:indeterminate="true"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@color/outline" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/testVibrationButton"
+                    style="@style/Widget.Alarmcon.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/test_vibration" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

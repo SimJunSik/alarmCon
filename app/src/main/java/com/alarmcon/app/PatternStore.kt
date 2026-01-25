@@ -1,9 +1,11 @@
-package com.example.alarmcon
+package com.alarmcon.app
 
 import android.content.Context
-import com.example.alarmcon.R
+import com.alarmcon.app.R
 
 object PatternStore {
+    private const val MAX_SEGMENT_MS = 15_000L
+    private const val MAX_TOTAL_MS = 60_000L
     private const val PREFS_NAME = "alarmcon_prefs"
     private const val KEY_PREFIX = "pattern_"
     private const val NAME_PREFIX = "pattern_name_"
@@ -17,6 +19,7 @@ object PatternStore {
     private const val KEY_LAST_MATCH_TIME = "last_match_time"
 
     data class LastEvent(val packageName: String, val timestamp: Long)
+    data class PatternData(val timings: LongArray, val amplitudes: IntArray)
 
     fun savePattern(context: Context, targetPackage: String, patternText: String, name: String): Boolean {
         if (patternText.isBlank()) {
@@ -29,10 +32,11 @@ object PatternStore {
         }
 
         val pattern = parsePattern(patternText) ?: return false
+        val normalized = formatPattern(pattern)
         val patternName = name.trim().ifEmpty { context.getString(R.string.pattern_name_default) }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_PREFIX + targetPackage, pattern.joinToString(","))
+            .putString(KEY_PREFIX + targetPackage, normalized)
             .putString(NAME_PREFIX + targetPackage, patternName)
             .apply()
         return true
@@ -60,24 +64,25 @@ object PatternStore {
         }
 
         val pattern = parsePattern(patternText) ?: return false
+        val normalized = formatPattern(pattern)
         val patternName = name.trim().ifEmpty { context.getString(R.string.pattern_name_default) }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(SENDER_PATTERN_PREFIX + senderKey, pattern.joinToString(","))
+            .putString(SENDER_PATTERN_PREFIX + senderKey, normalized)
             .putString(SENDER_NAME_PREFIX + senderKey, patternName)
             .putString(SENDER_VALUE_PREFIX + senderKey, senderValue)
             .apply()
         return true
     }
 
-    fun getPattern(context: Context, targetPackage: String): LongArray? {
+    fun getPattern(context: Context, targetPackage: String): PatternData? {
         val text = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_PREFIX + targetPackage, null)
             ?: return null
         return parsePattern(text)
     }
 
-    fun getSenderPattern(context: Context, targetPackage: String, senderText: String): LongArray? {
+    fun getSenderPattern(context: Context, targetPackage: String, senderText: String): PatternData? {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val normalizedSender = senderText.trim().lowercase()
         if (normalizedSender.isEmpty()) return null
@@ -258,23 +263,64 @@ object PatternStore {
         return LastEvent(pkg, time)
     }
 
-    fun parsePatternText(patternText: String): LongArray? {
+    fun parsePatternText(patternText: String): PatternData? {
         return parsePattern(patternText)
     }
 
-    private fun parsePattern(patternText: String): LongArray? {
+    private fun parsePattern(patternText: String): PatternData? {
         val parts = patternText.split(",")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
         if (parts.isEmpty()) return null
 
-        val numbers = mutableListOf<Long>()
-        for (part in parts) {
-            val value = part.toLongOrNull() ?: return null
-            if (value < 0L) return null
-            numbers.add(value)
+        val timings = ArrayList<Long>(parts.size)
+        val amplitudes = ArrayList<Int>(parts.size)
+        var total = 0L
+        for ((index, part) in parts.withIndex()) {
+            val pieces = part.split(":", limit = 2).map { it.trim() }
+            val duration = pieces.getOrNull(0)?.toLongOrNull() ?: return null
+            if (duration < 0L) return null
+            if (duration > MAX_SEGMENT_MS) return null
+            total += duration
+            if (total > MAX_TOTAL_MS) return null
+
+            val isVibrate = index % 2 == 1
+            val amplitude = if (!isVibrate) {
+                0
+            } else {
+                val ampToken = pieces.getOrNull(1)
+                if (ampToken.isNullOrEmpty()) {
+                    255
+                } else {
+                    val amp = ampToken.toIntOrNull() ?: return null
+                    if (amp !in 1..255) return null
+                    amp
+                }
+            }
+
+            timings.add(duration)
+            amplitudes.add(amplitude)
         }
-        return numbers.toLongArray()
+
+        return if (timings.isEmpty()) {
+            null
+        } else {
+            PatternData(timings.toLongArray(), amplitudes.toIntArray())
+        }
+    }
+
+    private fun formatPattern(pattern: PatternData): String {
+        val parts = ArrayList<String>(pattern.timings.size)
+        for (index in pattern.timings.indices) {
+            val duration = pattern.timings[index]
+            if (index % 2 == 1) {
+                val amp = pattern.amplitudes.getOrNull(index) ?: 255
+                parts.add("$duration:$amp")
+            } else {
+                parts.add(duration.toString())
+            }
+        }
+        return parts.joinToString(",")
     }
 
     private fun buildSenderKey(packageName: String, sender: String): String {

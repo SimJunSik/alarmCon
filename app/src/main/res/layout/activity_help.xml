@@ -15,6 +15,8 @@
             style="@style/Widget.Alarmcon.Title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textColor="@color/on_primary"
+            android:textSize="22sp"
             android:text="@string/help_title" />
 
         <TextView
@@ -22,12 +24,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:textColor="@color/on_primary"
+            android:textSize="18sp"
             android:text="@string/help_section_setup" />
 
         <TextView
             style="@style/Widget.Alarmcon.HelperText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textSize="15sp"
             android:text="@string/help_setup_body" />
 
         <TextView
@@ -35,12 +40,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:textColor="@color/on_primary"
+            android:textSize="18sp"
             android:text="@string/help_section_sender" />
 
         <TextView
             style="@style/Widget.Alarmcon.HelperText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textSize="15sp"
             android:text="@string/help_sender_body" />
 
         <TextView
@@ -48,12 +56,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:textColor="@color/on_primary"
+            android:textSize="18sp"
             android:text="@string/help_section_mute" />
 
         <TextView
             style="@style/Widget.Alarmcon.HelperText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textSize="15sp"
             android:text="@string/help_mute_body" />
 
         <TextView
@@ -61,12 +72,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:textColor="@color/on_primary"
+            android:textSize="18sp"
             android:text="@string/help_section_ai" />
 
         <TextView
             style="@style/Widget.Alarmcon.HelperText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textSize="15sp"
             android:text="@string/help_ai_body" />
 
         <TextView
@@ -74,12 +88,15 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
+            android:textColor="@color/on_primary"
+            android:textSize="18sp"
             android:text="@string/help_section_delete" />
 
         <TextView
             style="@style/Widget.Alarmcon.HelperText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:textSize="15sp"
             android:text="@string/help_delete_body" />
     </LinearLayout>
 </ScrollView>

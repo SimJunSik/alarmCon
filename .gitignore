@@ -9,6 +9,7 @@ local.properties
 # IDE
 .idea/
 *.iml
+.cursor/
 
 # OS
 .DS_Store

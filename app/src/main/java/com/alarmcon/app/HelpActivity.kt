@@ -1,4 +1,4 @@
-package com.example.alarmcon
+package com.alarmcon.app
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity

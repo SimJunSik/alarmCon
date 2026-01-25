@@ -10,4 +10,6 @@
     <color name="on_surface">#111827</color>
     <color name="outline">#D7DCE8</color>
     <color name="muted">#4B5563</color>
+    <color name="dropdown_bg">#FFFFFF</color>
+    <color name="dropdown_selected">#EEF2FF</color>
 </resources>

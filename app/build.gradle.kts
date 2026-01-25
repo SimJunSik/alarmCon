@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.alarmcon"
-    compileSdk = 34
+    namespace = "com.alarmcon.app"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.alarmcon"
+        applicationId = "com.alarmcon.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "1.0.1"
 
         val openAiKey = project.findProperty("OPENAI_API_KEY") as String? ?: ""
         buildConfigField("String", "OPENAI_API_KEY", "\"$openAiKey\"")
